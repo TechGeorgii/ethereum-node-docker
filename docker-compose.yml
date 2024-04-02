@@ -1,0 +1,61 @@
+version: '3'
+
+services:
+  ubuntu:
+    container_name: gsavchenko-node-ubuntu
+    build:
+      context: .
+      dockerfile: ubuntu.Dockerfile
+    volumes:
+      - /home/gsavchenko/.clef:/root/.clef
+      - /crypto/mainnet/ethereum/keystore:/root/.ethereum/keystore
+    restart: always
+    networks:
+      - crypto
+  geth:
+    image: ethereum/client-go:stable
+    container_name: gsavchenko-mainnet-geth
+    restart: always
+    volumes:
+      - /crypto/mainnet/ethereum:/root/.ethereum
+    ports:
+      - 30303:30303
+      - 30303:30303/udp
+    networks:
+      - crypto
+    command:
+      - "--ipcdisable"				# disable IPC – we will use HTTP as our clients are in Docker containers
+      - "--http"				# enable HTTP transport – will use it
+      - "--http.api=eth,net,web3,admin"         # to enable admin module
+      - "--http.addr=0.0.0.0"	                # addr to listen instead of localhost
+      - "--http.vhosts=*"			# hostnames to accept requests. allow everything – a separate docker network
+      - "--authrpc.addr=0.0.0.0"
+      - "--authrpc.vhosts=*"
+      - "--signer=http://gsavchenko-node-ubuntu:8550"	# clef signer
+    environment:
+      GETH_AUTHRPC_ADDR: gsavchenko-mainnet-geth
+      GETH_AUTHRPC_VHOSTS: "*"
+  beacon:
+    image: gcr.io/prysmaticlabs/prysm/beacon-chain:stable
+    container_name: gsavchenko-mainnet-prysm-beacon
+    restart: always
+    volumes:
+      - /crypto/mainnet:/crypto
+    ports:
+      - 13000:13000
+      - 12000:12000/udp
+    networks:
+      - crypto
+    command:
+      - "--accept-terms-of-use=true"
+      - "--datadir=/crypto/eth2"
+      - "--jwt-secret=/crypto/ethereum/geth/jwtsecret"
+      - "--execution-endpoint=http://gsavchenko-mainnet-geth:8551"
+      - "--checkpoint-sync-url=https://beaconstate-mainnet.chainsafe.io"
+      - "--genesis-beacon-api-url=https://beaconstate-mainnet.chainsafe.io"
+      - "--grpc-gateway-host=0.0.0.0"
+      - "--monitoring-host=0.0.0.0"
+
+networks:
+  crypto:
+    name: gsavchenko_node_network
